@@ -470,13 +470,13 @@ input, textarea { font-family: inherit; }
 
 <!-- Submit screen (hidden initially) -->
 <div id="submit-screen">
-  <h2>Peninjauan Akhir</h2>
+  <h2 id="submit-title">Peninjauan Akhir</h2>
   <p id="submit-msg"></p>
   <div id="incomplete-list" class="incomplete-list" style="display:none"></div>
   <div class="submit-actions">
-    <button class="nav-btn primary" id="btn-csv" onclick="exportCSV()">⬇ Unduh CSV</button>
     <button class="nav-btn secondary" id="btn-go-missing" onclick="goMissing()" style="display:none">Lengkapi yang kurang</button>
   </div>
+  <div id="submit-status" style="display:none;margin-top:16px;padding:14px;border-radius:8px;font-size:0.84rem;line-height:1.5"></div>
 </div>
 
 <!-- Bottom nav -->
@@ -811,17 +811,32 @@ function showSubmit() {
   const msg = document.getElementById('submit-msg');
   const incList = document.getElementById('incomplete-list');
   const goBtn = document.getElementById('btn-go-missing');
+  const statusEl = document.getElementById('submit-status');
+  const titleEl = document.getElementById('submit-title');
 
   if (missing.length === 0) {
-    msg.textContent = `Semua ${CASES.length} kasus selesai dinilai. Terima kasih, ${state.name}! Unduh CSV di bawah untuk menyimpan hasil Anda. Data juga telah dikirimkan ke sistem kami secara otomatis.`;
+    titleEl.textContent = 'Evaluasi Selesai';
+    msg.textContent = `Terima kasih, ${state.name}! Semua ${CASES.length} kasus telah Anda nilai.`;
     incList.style.display = 'none';
     goBtn.style.display = 'none';
-    if (CFG.webhookUrl) submitToSheets();
+    statusEl.style.display = 'block';
+    statusEl.style.background = 'var(--surface-2)';
+    statusEl.style.border = '1px solid var(--border)';
+    statusEl.style.color = 'var(--muted)';
+    statusEl.textContent = 'Mengirimkan data ke sistem…';
+    submitToSheets(() => {
+      statusEl.style.background = 'var(--called-bg)';
+      statusEl.style.border = 'none';
+      statusEl.style.color = 'var(--called-fg)';
+      statusEl.textContent = '✓ Data Anda berhasil tersimpan. Halaman ini dapat ditutup.';
+    });
   } else {
+    titleEl.textContent = 'Peninjauan Akhir';
     msg.textContent = `${done} dari ${CASES.length} kasus selesai. Kasus berikut masih belum lengkap:`;
     incList.style.display = 'block';
     incList.innerHTML = missing.map(c => `<strong>${c.id}</strong> — ${QUESTIONS.filter(q=>!(state.answers[c.id]||{})[q.id]).map(q=>q.text.split(' ').slice(0,4).join(' ')+'…').join('; ')}`).join('<br>');
     goBtn.style.display = 'inline-flex';
+    statusEl.style.display = 'none';
   }
 }
 
@@ -831,28 +846,10 @@ function goMissing() {
 }
 
 // ─────────────────────────────────────────────
-// EXPORT
+// SUBMIT TO SHEETS
 // ─────────────────────────────────────────────
-function exportCSV() {
-  const headers = ['annotator_id','name','case_id','category','system_decision','system_conf',
-    ...QUESTIONS.map(q=>q.id), 'notes','timestamp'];
-  const rows = CASES.map(c => {
-    const ans = state.answers[c.id] || {};
-    return [state.annotatorId, state.name, c.id, c.cat, c.decision, c.conf,
-      ...QUESTIONS.map(q=>ans[q.id]||''), ans.notes||'', new Date().toISOString()];
-  });
-  const csv = [headers, ...rows].map(r => r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
-  const a = Object.assign(document.createElement('a'), {
-    href: 'data:text/csv;charset=utf-8,' + encodeURIComponent(csv),
-    download: `${CFG.studyId}_${state.annotatorId}_${Date.now()}.csv`
-  });
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-}
-
-function submitToSheets() {
-  if (!CFG.webhookUrl) return;
+function submitToSheets(onDone) {
+  if (!CFG.webhookUrl) { if (onDone) onDone(); return; }
   const rows = CASES.map(c => {
     const ans = state.answers[c.id] || {};
     return { annotator_id: state.annotatorId, name: state.name, case_id: c.id,
@@ -861,8 +858,8 @@ function submitToSheets() {
       notes: ans.notes||'', timestamp: new Date().toISOString() };
   });
   fetch(CFG.webhookUrl, { method:'POST', body: JSON.stringify(rows), mode:'no-cors' })
-    .then(()=>console.log('Submitted to Sheets'))
-    .catch(e=>console.error('Sheet submit failed', e));
+    .then(() => { if (onDone) onDone(); })
+    .catch(e => { console.error('Sheet submit failed', e); if (onDone) onDone(); });
 }
 
 // ─────────────────────────────────────────────
