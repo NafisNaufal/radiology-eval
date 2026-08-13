@@ -437,6 +437,17 @@ input, textarea { font-family: inherit; }
 <div id="main">
   <!-- Image panel -->
   <div class="img-panel">
+    <div class="decision-readout" style="border:none;border-bottom:1px solid var(--border);border-radius:0;margin:0">
+      <div class="decision-header">Keputusan sistem AI</div>
+      <div class="decision-body">
+        <span class="decision-badge" id="decision-badge">—</span>
+        <div class="confidence-block">
+          <div class="confidence-value" id="conf-value">—</div>
+          <div class="confidence-label">Tingkat keyakinan sistem (0–100%)</div>
+          <div class="confidence-gauge" id="conf-gauge"></div>
+        </div>
+      </div>
+    </div>
     <div class="img-frame" onclick="openZoom()">
       <img id="case-img" src="" alt="Citra medis">
       <span class="img-zoom-hint">🔍 Klik untuk perbesar</span>
@@ -447,17 +458,6 @@ input, textarea { font-family: inherit; }
       <div style="border-top:1px solid var(--border);margin:8px 0"></div>
       <div class="img-meta-label">Pertanyaan yang diajukan ke sistem</div>
       <div class="query-text" id="case-query">—</div>
-    </div>
-    <div class="decision-readout">
-      <div class="decision-header">Keputusan sistem AI</div>
-      <div class="decision-body">
-        <span class="decision-badge" id="decision-badge">—</span>
-        <div class="confidence-block">
-          <div class="confidence-value" id="conf-value">—</div>
-          <div class="confidence-label">Tingkat keyakinan sistem (0–100%)</div>
-          <div class="confidence-gauge" id="conf-gauge"></div>
-        </div>
-      </div>
     </div>
   </div>
 
