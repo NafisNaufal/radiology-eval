@@ -453,18 +453,7 @@ input, textarea { font-family: inherit; }
   <!-- Questions panel -->
   <div class="q-panel" id="q-panel">
     <span class="case-id-chip" id="case-chip">RE-000</span>
-    <div class="decision-readout">
-      <div class="decision-header">Keputusan sistem AI</div>
-      <div class="decision-body">
-        <span class="decision-badge" id="decision-badge">—</span>
-        <div class="confidence-block">
-          <div class="confidence-value" id="conf-value">—</div>
-          <div class="confidence-label">Tingkat keyakinan sistem (0–100%)</div>
-          <div class="confidence-gauge" id="conf-gauge"></div>
-        </div>
-      </div>
-    </div>
-    <!-- Questions injected here -->
+    <!-- Questions and AI decision injected dynamically -->
   </div>
 </div>
 
@@ -590,15 +579,6 @@ const CASES = [
 // ─────────────────────────────────────────────
 const QUESTIONS = [
   {
-    id: 'q1',
-    text: 'Apakah keputusan sistem AI sudah tepat untuk kasus ini?',
-    opts: [
-      {val:'tepat',   label:'Tepat — keputusan sistem sudah sesuai secara klinis'},
-      {val:'tidak',   label:'Tidak tepat — sistem seharusnya memilih pendekatan berbeda'},
-      {val:'diskusi', label:'Perlu diskusi lebih lanjut'},
-    ]
-  },
-  {
     id: 'q2',
     text: 'Menurut Anda sebagai dokter, analisis apa yang paling tepat untuk citra dan pertanyaan ini?',
     opts: [
@@ -606,6 +586,15 @@ const QUESTIONS = [
       {val:'vista3d', label:'Segmentasi organ dalam CT Scan',       badge:'CT Abdomen'},
       {val:'cxr',     label:'Analisis rontgen dada',                badge:'X-Ray Dada'},
       {val:'tahan',   label:'Tidak perlu model khusus — pertanyaan ini dapat dijawab langsung'},
+    ]
+  },
+  {
+    id: 'q1',
+    text: 'Setelah melihat keputusan sistem AI di atas, apakah keputusan tersebut sudah sesuai untuk kasus ini?',
+    opts: [
+      {val:'tepat',   label:'Sesuai — keputusan sistem sudah tepat secara klinis'},
+      {val:'tidak',   label:'Tidak sesuai — sistem seharusnya memilih pendekatan berbeda'},
+      {val:'diskusi', label:'Perlu diskusi lebih lanjut'},
     ]
   },
 ];
@@ -673,42 +662,71 @@ function renderCase(idx) {
   if(document.getElementById('modality-label')) document.getElementById('modality-label').textContent = c.modality || '—';
   document.getElementById('case-chip').textContent = 'Kasus ' + (idx+1) + ' dari ' + CASES.length + (c.modality ? '  ·  ' + c.modality : '');
 
-  // Decision badge
-  const badge = document.getElementById('decision-badge');
-  badge.textContent = c.decision;
-  badge.className = 'decision-badge ' + (c.cat === 'NONE' || c.cat === 'CROSS' ? 'held' : 'called');
-
-  // Confidence gauge (10 segments)
-  const pct = c.conf;
-  const filled = Math.round(pct * 10);
-  const tier = pct < 0.5 ? 'low' : pct < 0.8 ? 'mid' : 'high';
-  document.getElementById('conf-value').textContent = (pct * 100).toFixed(1) + '%';
-  const gauge = document.getElementById('conf-gauge');
-  gauge.innerHTML = Array.from({length:10}, (_,i) =>
-    `<div class="gauge-seg ${i < filled ? 'active '+tier : ''}"></div>`
-  ).join('');
-
-  // Questions
+  // Questions panel — blind flow: Q2 first, reveal AI decision, then Q1
   const panel = document.getElementById('q-panel');
-  // Keep chip, rebuild questions
-  panel.querySelectorAll('.q-card, .notes-card').forEach(el => el.remove());
+  panel.querySelectorAll('.q-card, .notes-card, .decision-readout, .decision-pending').forEach(el => el.remove());
 
-  QUESTIONS.forEach(q => {
-    const card = document.createElement('div');
-    card.className = 'q-card';
-    const opts = q.opts.map(o => {
-      const sel = ans[q.id] === o.val ? 'selected' : '';
-      const badge = o.badge ? `<span class='opt-badge' style='background:var(--surface-2);color:var(--muted)'>${o.badge}</span>` : '';
+  const q2def = QUESTIONS.find(q => q.id === 'q2');
+  const q1def = QUESTIONS.find(q => q.id === 'q1');
+
+  // Always render Q2 first (blind)
+  const card2 = document.createElement('div');
+  card2.className = 'q-card';
+  const opts2 = q2def.opts.map(o => {
+    const sel = ans['q2'] === o.val ? 'selected' : '';
+    const obadge = o.badge ? `<span class='opt-badge' style='background:var(--surface-2);color:var(--muted)'>${o.badge}</span>` : '';
+    return `<label class="q-opt ${sel}">
+      <input type="radio" name="${c.id}_q2" value="${o.val}" ${sel ? 'checked' : ''} onchange="setAnswer('${c.id}','q2',this.value)">
+      ${o.label} ${obadge}
+    </label>`;
+  }).join('');
+  card2.innerHTML = `<h3>${q2def.text}</h3><div class="q-options">${opts2}</div>`;
+  panel.appendChild(card2);
+
+  if (ans['q2']) {
+    // Reveal AI decision after Q2 is answered
+    const pct = c.conf;
+    const filled = Math.round(pct * 10);
+    const tier = pct < 0.5 ? 'low' : pct < 0.8 ? 'mid' : 'high';
+    const gaugeHtml = Array.from({length:10}, (_,i) =>
+      `<div class="gauge-seg ${i < filled ? 'active '+tier : ''}"></div>`
+    ).join('');
+    const badgeCls = (c.cat === 'NONE' || c.cat === 'CROSS') ? 'held' : 'called';
+    const dr = document.createElement('div');
+    dr.className = 'decision-readout';
+    dr.innerHTML = `<div class="decision-header">Keputusan sistem AI</div>
+      <div class="decision-body">
+        <span class="decision-badge ${badgeCls}">${c.decision}</span>
+        <div class="confidence-block">
+          <div class="confidence-value">${(pct*100).toFixed(1)}%</div>
+          <div class="confidence-label">Tingkat keyakinan sistem (0–100%)</div>
+          <div class="confidence-gauge">${gaugeHtml}</div>
+        </div>
+      </div>`;
+    panel.appendChild(dr);
+
+    // Then Q1
+    const card1 = document.createElement('div');
+    card1.className = 'q-card';
+    const opts1 = q1def.opts.map(o => {
+      const sel = ans['q1'] === o.val ? 'selected' : '';
       return `<label class="q-opt ${sel}">
-        <input type="radio" name="${c.id}_${q.id}" value="${o.val}" ${sel ? 'checked' : ''} onchange="setAnswer('${c.id}','${q.id}',this.value)">
-        ${o.label} ${badge}
+        <input type="radio" name="${c.id}_q1" value="${o.val}" ${sel ? 'checked' : ''} onchange="setAnswer('${c.id}','q1',this.value)">
+        ${o.label}
       </label>`;
     }).join('');
-    card.innerHTML = `<h3>${q.text}</h3><div class="q-options">${opts}</div>`;
-    panel.appendChild(card);
-  });
+    card1.innerHTML = `<h3>${q1def.text}</h3><div class="q-options">${opts1}</div>`;
+    panel.appendChild(card1);
+  } else {
+    // Pending hint
+    const hint = document.createElement('div');
+    hint.className = 'decision-pending';
+    hint.style.cssText = 'padding:14px 16px;border-radius:8px;background:var(--surface-2);border:1px dashed var(--border);color:var(--muted);font-size:0.82rem;line-height:1.5;margin-top:4px';
+    hint.textContent = 'Pilih analisis Anda terlebih dahulu — keputusan sistem AI akan ditampilkan setelah Anda menjawab.';
+    panel.appendChild(hint);
+  }
 
-  // Notes
+  // Notes (always at bottom)
   const nc = document.createElement('div');
   nc.className = 'notes-card';
   nc.innerHTML = `<label>Catatan Tambahan (opsional)</label>
@@ -732,10 +750,85 @@ function setAnswer(caseId, qId, val) {
   saveState();
   updateProgress();
   updateGrid();
-  // Refresh option styling
-  document.querySelectorAll(`[name="${caseId}_${qId}"]`).forEach(inp => {
-    inp.closest('.q-opt').classList.toggle('selected', inp.checked);
-  });
+  if (qId === 'q2') {
+    // Re-render panel to reveal AI decision and show Q1
+    renderCasePanel(state.current);
+  } else {
+    // Refresh option styling only
+    document.querySelectorAll(`[name="${caseId}_${qId}"]`).forEach(inp => {
+      inp.closest('.q-opt').classList.toggle('selected', inp.checked);
+    });
+  }
+}
+
+function renderCasePanel(idx) {
+  const c = CASES[idx];
+  const ans = state.answers[c.id] || {};
+  const panel = document.getElementById('q-panel');
+  panel.querySelectorAll('.q-card, .notes-card, .decision-readout, .decision-pending').forEach(el => el.remove());
+
+  const q2def = QUESTIONS.find(q => q.id === 'q2');
+  const q1def = QUESTIONS.find(q => q.id === 'q1');
+
+  const card2 = document.createElement('div');
+  card2.className = 'q-card';
+  const opts2 = q2def.opts.map(o => {
+    const sel = ans['q2'] === o.val ? 'selected' : '';
+    const obadge = o.badge ? `<span class='opt-badge' style='background:var(--surface-2);color:var(--muted)'>${o.badge}</span>` : '';
+    return `<label class="q-opt ${sel}">
+      <input type="radio" name="${c.id}_q2" value="${o.val}" ${sel ? 'checked' : ''} onchange="setAnswer('${c.id}','q2',this.value)">
+      ${o.label} ${obadge}
+    </label>`;
+  }).join('');
+  card2.innerHTML = `<h3>${q2def.text}</h3><div class="q-options">${opts2}</div>`;
+  panel.appendChild(card2);
+
+  if (ans['q2']) {
+    const pct = c.conf;
+    const filled = Math.round(pct * 10);
+    const tier = pct < 0.5 ? 'low' : pct < 0.8 ? 'mid' : 'high';
+    const gaugeHtml = Array.from({length:10}, (_,i) =>
+      `<div class="gauge-seg ${i < filled ? 'active '+tier : ''}"></div>`
+    ).join('');
+    const badgeCls = (c.cat === 'NONE' || c.cat === 'CROSS') ? 'held' : 'called';
+    const dr = document.createElement('div');
+    dr.className = 'decision-readout';
+    dr.innerHTML = `<div class="decision-header">Keputusan sistem AI</div>
+      <div class="decision-body">
+        <span class="decision-badge ${badgeCls}">${c.decision}</span>
+        <div class="confidence-block">
+          <div class="confidence-value">${(pct*100).toFixed(1)}%</div>
+          <div class="confidence-label">Tingkat keyakinan sistem (0–100%)</div>
+          <div class="confidence-gauge">${gaugeHtml}</div>
+        </div>
+      </div>`;
+    panel.appendChild(dr);
+
+    const card1 = document.createElement('div');
+    card1.className = 'q-card';
+    const opts1 = q1def.opts.map(o => {
+      const sel = ans['q1'] === o.val ? 'selected' : '';
+      return `<label class="q-opt ${sel}">
+        <input type="radio" name="${c.id}_q1" value="${o.val}" ${sel ? 'checked' : ''} onchange="setAnswer('${c.id}','q1',this.value)">
+        ${o.label}
+      </label>`;
+    }).join('');
+    card1.innerHTML = `<h3>${q1def.text}</h3><div class="q-options">${opts1}</div>`;
+    panel.appendChild(card1);
+  } else {
+    const hint = document.createElement('div');
+    hint.className = 'decision-pending';
+    hint.style.cssText = 'padding:14px 16px;border-radius:8px;background:var(--surface-2);border:1px dashed var(--border);color:var(--muted);font-size:0.82rem;line-height:1.5;margin-top:4px';
+    hint.textContent = 'Pilih analisis Anda terlebih dahulu — keputusan sistem AI akan ditampilkan setelah Anda menjawab.';
+    panel.appendChild(hint);
+  }
+
+  const nc = document.createElement('div');
+  nc.className = 'notes-card';
+  nc.innerHTML = `<label>Catatan Tambahan (opsional)</label>
+    <textarea maxlength="400" placeholder="Tuliskan observasi atau keberatan klinis jika ada..."
+      oninput="setNote('${c.id}',this.value)">${ans.notes||''}</textarea>`;
+  panel.appendChild(nc);
 }
 
 function setNote(caseId, val) {
