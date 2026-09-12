@@ -938,7 +938,7 @@ function submitToSheets(onDone) {
     const ans = state.answers[c.id] || {};
     return { annotator_id: state.annotatorId, name: state.name, case_id: c.id,
       category: c.cat, system_decision: c.decision, system_conf: c.conf,
-      ...Object.fromEntries(QUESTIONS.map(q=>[q.id, ans[q.id]||''])),
+      q1: ans.q1||'', q2: ans.q2||'', q3: '',
       notes: ans.notes||'', timestamp: new Date().toISOString() };
   });
   const url = CFG.webhookUrl + '?d=' + encodeURIComponent(JSON.stringify(rows));
